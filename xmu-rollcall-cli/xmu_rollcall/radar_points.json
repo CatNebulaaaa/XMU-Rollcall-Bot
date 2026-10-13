@@ -1,0 +1,31 @@
+{
+  "coordinate_system": "WGS84",
+  "points": [
+    {
+      "name": "学武楼",
+      "latitude": 24.6083073,
+      "longitude": 118.3090821
+    },
+    {
+      "name": "坤銮楼",
+      "latitude": 24.6084008,
+      "longitude": 118.3080402
+    },
+    {
+      "name": "文宣楼",
+      "latitude": 24.6080642,
+      "longitude": 118.3053024
+    },
+    {
+      "name": "西部片区2号楼（学信楼）",
+      "latitude": 24.6070605,
+      "longitude": 118.295194
+    },
+    {
+      "name": "西部片区4号楼（启信楼）",
+      "latitude": 24.6081345,
+      "longitude": 118.2954988
+    }
+  ],
+  "attribution": "© OpenStreetMap contributors, ODbL 1.0; https://www.openstreetmap.org/copyright"
+}

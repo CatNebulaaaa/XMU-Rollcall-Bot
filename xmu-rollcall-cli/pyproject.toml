@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "XMU Rollcall Bot CLI - Automated rollcall monitoring and answering for Xiamen University Tronclass"
 readme = "README.md"
 requires-python = ">=3.7"
-license = "MIT"
+license = {text = "MIT"}
 authors = [
     {name = "KrsMt", email = "krsmt0113@gmail.com"}
 ]
@@ -41,10 +41,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/KrsMt-0113/XMU-Rollcall-Bot"
-Repository = "https://github.com/KrsMt-0113/XMU-Rollcall-Bot"
-Issues = "https://github.com/KrsMt-0113/XMU-Rollcall-Bot/issues"
-Documentation = "https://github.com/KrsMt-0113/XMU-Rollcall-Bot/blob/main/README.md"
+Homepage = "https://github.com/CatNebulaaaa/XMU-Rollcall-Bot"
+Repository = "https://github.com/CatNebulaaaa/XMU-Rollcall-Bot"
+Issues = "https://github.com/CatNebulaaaa/XMU-Rollcall-Bot/issues"
+Documentation = "https://github.com/CatNebulaaaa/XMU-Rollcall-Bot/blob/main/README.md"
 
 [project.scripts]
 XMUrollcall-cli = "xmu_rollcall.cli:cli"
@@ -58,4 +58,4 @@ packages = ["xmu_rollcall"]
 version = {attr = "xmu_rollcall.__version__"}
 
 [tool.setuptools.package-data]
-xmu_rollcall = ["py.typed"]
+xmu_rollcall = ["py.typed", "radar_points.json"]

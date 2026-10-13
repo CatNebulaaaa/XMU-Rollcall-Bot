@@ -41,6 +41,7 @@ jobs:
           path: xmu-rollcall-cli/dist/
 
   pypi-publish:
+    if: github.repository == 'KrsMt-0113/XMU-Rollcall-Bot'
     runs-on: ubuntu-latest
     needs:
       - release-build

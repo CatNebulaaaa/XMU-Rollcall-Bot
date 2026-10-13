@@ -1,5 +1,7 @@
 # xmu-rollcall-cli
 
+**CatNebulaaaa Fork** — based on [KrsMt-0113/XMU-Rollcall-Bot](https://github.com/KrsMt-0113/XMU-Rollcall-Bot), with timetable number-code fallback and five Xiang'an campus radar presets enabled by plain `xmu start`. Original author credit and the MIT license are preserved.
+
 A command-line tool for monitoring and auto-answering Tronclass rollcalls at Xiamen University.
 
 > This project is intended for personal learning and automation convenience. Use it at your own risk and comply with your school's rules.
@@ -10,16 +12,16 @@ A command-line tool for monitoring and auto-answering Tronclass rollcalls at Xia
 - Continuous rollcall polling (1-second interval)
 - Automatic handling for:
   - Number rollcalls (fetch number code and answer directly)
-  - Radar rollcalls (location solving)
+  - Radar rollcalls (five WGS84 building presets, tried in order with 5-second spacing)
 - Multi-account management in one local config
 - Session cookie cache and refresh support
 
 ## Installation
 
-Install from PyPI:
+Install this fork from GitHub:
 
 ```bash
-pip install xmu-rollcall-cli
+python -m pip install --upgrade "git+https://github.com/CatNebulaaaa/XMU-Rollcall-Bot.git#subdirectory=xmu-rollcall-cli"
 ```
 
 After installation, these command aliases are available:
@@ -59,6 +61,8 @@ xmu refresh
 - `xmu config` - Add/delete accounts and set current account
 - `xmu switch` - Switch the current account
 - `xmu start` - Start rollcall monitoring loop
+- `xmu start --radar-points points.json` - Override the bundled five-point preset
+- `xmu start --latitude LAT --longitude LON` - Use one actual WGS84 location instead
 - `xmu refresh` - Remove cached cookies for current account
 - `xmu --help` - Show help
 
@@ -85,6 +89,7 @@ export XMU_ROLLCALL_CONFIG_DIR="$HOME/Documents/.xmu_rollcall"
 
 - QR code rollcalls are currently **not supported**.
 - This tool depends on Tronclass/XMU API behavior and may break if upstream endpoints change.
+- The 48 regression tests use simulated responses. Real classroom attendance has not been verified; building centers may differ from the classroom location.
 
 ## Supported Python Versions
 
@@ -92,8 +97,9 @@ export XMU_ROLLCALL_CONFIG_DIR="$HOME/Documents/.xmu_rollcall"
 
 ## Project Links
 
-- Homepage: https://github.com/KrsMt-0113/XMU-Rollcall-Bot
-- Issues: https://github.com/KrsMt-0113/XMU-Rollcall-Bot/issues
+- Homepage: https://github.com/CatNebulaaaa/XMU-Rollcall-Bot
+- Issues: https://github.com/CatNebulaaaa/XMU-Rollcall-Bot/issues
+- Upstream: https://github.com/KrsMt-0113/XMU-Rollcall-Bot
 
 ## License
 

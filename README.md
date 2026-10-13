@@ -1,4 +1,65 @@
+# XMU Rollcall Bot · CatNebulaaaa Fork
 
+这是 [CatNebulaaaa](https://github.com/CatNebulaaaa) 维护的改造版本，基于 [KrsMt-0113/XMU-Rollcall-Bot](https://github.com/KrsMt-0113/XMU-Rollcall-Bot)，保留原作者署名和 MIT 许可证。
+
+## 本 fork 的修改
+
+- 数字签到：旧 `student_rollcalls` 接口缺码时，查询 `timetable_rollcalls`，传入课程 ID 和签到的 UTC 日期，并按签到 ID 精确匹配。
+- 雷达签到：普通 `xmu start` 默认启用五个翔安校区点位轮询，不依赖接口返回距离；点位间隔 5 秒，成功立即停止。
+- 启动界面显示 `CatNebulaaaa Fork`，底部保留 `KrsMt` 原作者署名。
+- 处理缺距离、非法 JSON、超时、登录拒绝和点位文件错误，避免原来的 `NoneType` 计算崩溃。
+
+## 安装与启动
+
+安装这个 fork，而不是上游 PyPI 版本：
+
+```bash
+python -m pip install --upgrade "git+https://github.com/CatNebulaaaa/XMU-Rollcall-Bot.git#subdirectory=xmu-rollcall-cli"
+xmu config
+xmu start
+```
+
+已有账号配置可以继续使用。更新后退出旧进程，再启动 `xmu start`，无需额外点位参数，也无需进入特定目录。
+
+默认点位为学武楼、坤銮楼、文宣楼、西部片区2号楼（学信楼）、西部片区4号楼（启信楼）。坐标位于包内的 `radar_points.json`，取自具名楼宇轮廓的中心，采用 WGS84。
+
+自定义点位或单个实际位置：
+
+```bash
+xmu start --radar-points points.json
+xmu start --latitude YOUR_LATITUDE --longitude YOUR_LONGITUDE
+```
+
+自定义 JSON 使用以下格式；将占位符替换为实际数字：
+
+```json
+{
+  "coordinate_system": "WGS84",
+  "points": [
+    {"name": "YOUR_LOCATION", "latitude": null, "longitude": null}
+  ]
+}
+```
+
+两个坐标都留空的点会跳过，至少需要一个有效点。国内地图上的 GCJ-02 或 BD-09 坐标不能直接填成 WGS84。
+
+## 验证与数据来源
+
+已通过 48 项模拟接口回归测试，并检查安装后的默认启动和界面署名。验证没有提交真实签到；楼宇中心不代表具体教室位置，真实课堂效果仍需验证。
+
+点位来源见 [RADAR_POINTS_SOURCES.json](RADAR_POINTS_SOURCES.json)。地图数据为 © OpenStreetMap contributors，遵循 [ODbL 1.0](https://www.openstreetmap.org/copyright)。楼名与[厦大教学楼资料](https://metc.xmu.edu.cn/fwzn/ggjxfw.htm)及[信息学院楼宇名称公示](https://informatics.xmu.edu.cn/info/1103/12447.htm)核对。
+
+运行测试：
+
+```bash
+cd xmu-rollcall-cli
+python -m pip install pytest
+python -m pytest tests -q
+```
+
+## 上游历史文档
+
+以下保留上游原文档，相关版本和更新说明属于上游项目。
 
 <div align="center">
 

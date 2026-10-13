@@ -53,6 +53,8 @@ info.txt
 dist-*/
 
 # Testing
+.test-temp/
+.test-config/
 .tox/
 .coverage
 .coverage.*

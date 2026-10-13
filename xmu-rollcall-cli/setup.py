@@ -26,10 +26,10 @@ setup(
     description="XMU Rollcall Bot CLI - Automated rollcall monitoring and answering for Xiamen University Tronclass",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/KrsMt-0113/XMU-Rollcall-Bot",
+    url="https://github.com/CatNebulaaaa/XMU-Rollcall-Bot",
     project_urls={
-        "Bug Reports": "https://github.com/KrsMt-0113/XMU-Rollcall-Bot/issues",
-        "Source": "https://github.com/KrsMt-0113/XMU-Rollcall-Bot",
+        "Bug Reports": "https://github.com/CatNebulaaaa/XMU-Rollcall-Bot/issues",
+        "Source": "https://github.com/CatNebulaaaa/XMU-Rollcall-Bot",
     },
 
     # Requirements

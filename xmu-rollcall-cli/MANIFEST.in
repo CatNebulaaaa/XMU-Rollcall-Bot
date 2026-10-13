@@ -3,3 +3,4 @@ include LICENSE
 include requirements.txt
 recursive-include xmu_rollcall *.py
 
+include xmu_rollcall/radar_points.json

@@ -1,10 +1,10 @@
 import time
 from .verify import send_code, send_radar
 
-def process_rollcalls(data, session):
+def process_rollcalls(data, session, location=None, radar_points=None):
     """处理签到数据"""
     data_empty = {'rollcalls': []}
-    result = handle_rollcalls(data, session)
+    result = handle_rollcalls(data, session, location, radar_points)
     if False in result:
         return data_empty
     else:
@@ -18,6 +18,7 @@ def extract_rollcalls(data):
         rollcall_count = len(rollcalls)
         for rollcall in rollcalls:
             result.append({
+                'course_id': rollcall.get('course_id'),
                 'course_title': rollcall['course_title'],
                 'created_by_name': rollcall['created_by_name'],
                 'department_name': rollcall['department_name'],
@@ -26,6 +27,7 @@ def extract_rollcalls(data):
                 'is_radar': rollcall['is_radar'],
                 'rollcall_id': rollcall['rollcall_id'],
                 'rollcall_status': rollcall['rollcall_status'],
+                'rollcall_time': rollcall.get('rollcall_time'),
                 'scored': rollcall['scored'],
                 'status': rollcall['status']
             })
@@ -33,7 +35,7 @@ def extract_rollcalls(data):
         rollcall_count = 0
     return rollcall_count, result
 
-def handle_rollcalls(data, session):
+def handle_rollcalls(data, session, location=None, radar_points=None):
     """处理签到流程"""
     count, rollcalls = extract_rollcalls(data)
     answer_status = [False for _ in range(count)]
@@ -52,8 +54,16 @@ def handle_rollcalls(data, session):
                 temp_str = "QRcode rollcall"
             print(f"Rollcall type: {temp_str}\n")
 
-            if (rollcalls[i]['status'] == 'absent') & (rollcalls[i]['is_number']) & (not rollcalls[i]['is_radar']):
-                if send_code(session, rollcalls[i]['rollcall_id']):
+            if rollcalls[i]['is_expired']:
+                print("Rollcall expired; skipping.")
+                answer_status[i] = True
+            elif (rollcalls[i]['status'] == 'absent') & (rollcalls[i]['is_number']) & (not rollcalls[i]['is_radar']):
+                if send_code(
+                    session,
+                    rollcalls[i]['rollcall_id'],
+                    rollcalls[i]['course_id'],
+                    rollcalls[i]['rollcall_time'],
+                ):
                     answer_status[i] = True
                 else:
                     print("Answering failed.")
@@ -61,7 +71,7 @@ def handle_rollcalls(data, session):
                 print("Already answered.")
                 answer_status[i] = True
             elif rollcalls[i]['is_radar']:
-                if send_radar(session, rollcalls[i]['rollcall_id']):
+                if send_radar(session, rollcalls[i]['rollcall_id'], location, radar_points):
                     answer_status[i] = True
                 else:
                     print("Answering failed.")

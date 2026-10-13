@@ -11,6 +11,7 @@ from .rollcall_handler import process_rollcalls
 from .config import get_cookies_path
 
 base_url = "https://lnt.xmu.edu.cn"
+FORK_CREDIT = "XMU-Rollcall-Bot @ KrsMt | Fork by CatNebulaaaa"
 interval = 1
 headers = {
     "User-Agent": (
@@ -75,7 +76,7 @@ def print_banner():
     width = get_terminal_width()
     line = '=' * width
 
-    title1 = "XMU Rollcall Bot CLI"
+    title1 = "XMU Rollcall Bot CLI | CatNebulaaaa Fork"
     title2 = f"Version {__version__}"
 
     print(f"{Colors.OKCYAN}{line}{Colors.ENDC}")
@@ -119,7 +120,7 @@ def get_colorful_text(text, color_offset=0):
 
 def print_footer_text(color_offset=0):
     """打印底部彩色文字"""
-    text = "XMU-Rollcall-Bot @ KrsMt"
+    text = FORK_CREDIT
     colored = get_colorful_text(text, color_offset)
     print(center_text(colored))
 
@@ -184,7 +185,7 @@ def update_status_line(line_num, label, value, color):
 
 def update_footer_text():
     """更新底部彩色文字，不清屏"""
-    text = "XMU-Rollcall-Bot @ KrsMt"
+    text = FORK_CREDIT
     colored = get_colorful_text(text, 0)
     width = get_terminal_width()
 
@@ -201,7 +202,7 @@ def update_footer_text():
     sys.stdout.write("\033[?25h")
     sys.stdout.flush()
 
-def start_monitor(account):
+def start_monitor(account, location=None, radar_points=None):
     """启动监控程序"""
     USERNAME = account['username']
     PASSWORD = account['password']
@@ -304,7 +305,7 @@ def start_monitor(account):
                             print(f"\n{Colors.WARNING}{Colors.BOLD}{'!' * width}{Colors.ENDC}")
                             print(center_text(f"{Colors.WARNING}{Colors.BOLD}NEW ROLLCALL DETECTED{Colors.ENDC}"))
                             print(f"{Colors.WARNING}{Colors.BOLD}{'!' * width}{Colors.ENDC}\n")
-                            temp_data = process_rollcalls(temp_data, session)
+                            temp_data = process_rollcalls(temp_data, session, location, radar_points)
                             print_separator("=")
                             print(f"\n{center_text(f'{Colors.GRAY}Press Ctrl+C to exit, continuing monitor...{Colors.ENDC}')}\n")
                             try:

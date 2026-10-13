@@ -2,6 +2,7 @@ import uuid
 import time
 import math
 import requests
+from datetime import datetime, timezone
 
 base_url = "https://lnt.xmu.edu.cn"
 headers = {
@@ -43,32 +44,119 @@ def find_number_code(data, depth=0, max_depth=10):
                 return nested_code
     return None
 
-def send_code(in_session, rollcall_id):
+def rollcall_date_utc(rollcall_time):
+    """Return the UTC date required by the timetable rollcall API."""
+    try:
+        parsed = datetime.fromisoformat(str(rollcall_time).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc).date().isoformat()
+    except (TypeError, ValueError):
+        return datetime.now(timezone.utc).date().isoformat()
+
+
+def find_timetable_number_code(data, rollcall_id):
+    """Find a number code for one rollcall in a timetable API response."""
+    if isinstance(data, dict):
+        items = data.get("rollcalls", data.get("data", []))
+        if isinstance(items, dict):
+            return find_timetable_number_code(items, rollcall_id)
+    elif isinstance(data, list):
+        items = data
+    else:
+        return None
+
+    if not isinstance(items, list):
+        return None
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        item_id = item.get("id", item.get("rollcall_id"))
+        if str(item_id) != str(rollcall_id):
+            continue
+        number_code = item.get("number_code")
+        if number_code is not None:
+            return str(number_code)
+    return None
+
+
+def get_timetable_number_code(
+    in_session, rollcall_id, course_id, rollcall_time, request_headers
+):
+    """Fetch a number code from the timetable endpoint used by newer servers."""
+    if course_id is None:
+        print("Timetable lookup needs course_id from the rollcall list.")
+        return None
+
+    timetable_url = f"{base_url}/api/timetable_rollcalls"
+    params = [
+        ("course_ids", str(course_id)),
+        ("rollcall_date", rollcall_date_utc(rollcall_time)),
+    ]
+    try:
+        response = in_session.get(
+            timetable_url,
+            params=params,
+            headers=request_headers,
+            timeout=10,
+        )
+        if response.status_code != 200:
+            print(
+                "Failed to get number code from timetable API. "
+                f"Status: {response.status_code}."
+            )
+            return None
+        return find_timetable_number_code(response.json(), rollcall_id)
+    except requests.RequestException as e:
+        print(f"Failed to request timetable rollcall API: {type(e).__name__}")
+    except ValueError:
+        print("Failed to parse timetable rollcall API response: invalid JSON")
+    return None
+
+
+def send_code(
+    in_session, rollcall_id, course_id=None, rollcall_time=None
+):
     code_url = f"{base_url}/api/rollcall/{rollcall_id}/student_rollcalls"
     answer_url = f"{base_url}/api/rollcall/{rollcall_id}/answer_number_rollcall"
     print("Trying number code from API...")
     t00 = time.time()
     request_headers = in_session.headers
-    try:
-        code_response = in_session.get(code_url, headers=request_headers)
-        if code_response.status_code != 200:
-            t01 = time.time()
-            print(f"Failed to get number code. Status: {code_response.status_code}\nTime: {t01 - t00:.2f} s.")
-            return False
-        code_data = code_response.json()
-    except requests.RequestException as e:
-        t01 = time.time()
-        print(f"Failed to request number code API: {e}\nTime: {t01 - t00:.2f} s.")
-        return False
-    except ValueError as e:
-        t01 = time.time()
-        print(f"Failed to parse number code API response: {e}\nTime: {t01 - t00:.2f} s.")
-        return False
+    number_code = None
 
-    number_code = find_number_code(code_data)
+    try:
+        code_response = in_session.get(
+            code_url, headers=request_headers, timeout=10
+        )
+        if code_response.status_code == 200:
+            number_code = find_number_code(code_response.json())
+        else:
+            print(
+                "Number code detail API returned status "
+                f"{code_response.status_code}; trying timetable API."
+            )
+    except requests.RequestException as e:
+        print(f"Failed to request number code detail API: {type(e).__name__}")
+    except ValueError:
+        print("Failed to parse number code detail API response: invalid JSON")
+
+    if not number_code:
+        print("Number code missing in detail API; trying timetable API...")
+        number_code = get_timetable_number_code(
+            in_session,
+            rollcall_id,
+            course_id,
+            rollcall_time,
+            request_headers,
+        )
+
     if not number_code:
         t01 = time.time()
-        print(f"Failed to get number code. 'number_code' not found in API response.\nTime: {t01 - t00:.2f} s.")
+        print(
+            "Failed to get number code from available APIs. "
+            f"Time: {t01 - t00:.2f} s."
+        )
         return False
 
     payload = {
@@ -76,53 +164,124 @@ def send_code(in_session, rollcall_id):
         "numberCode": number_code
     }
     try:
-        response = in_session.put(answer_url, json=payload, headers=request_headers)
+        response = in_session.put(
+            answer_url, json=payload, headers=request_headers, timeout=10
+        )
         if response.status_code == 200:
-            print("Number code rollcall answered successfully.\nNumber code: ", number_code)
+            print(
+                "Number code rollcall answered successfully."
+            )
             time.sleep(5)
             t01 = time.time()
             print(f"Time: {t01 - t00:.2f} s.")
             return True
         t01 = time.time()
-        print(f"Failed to submit number code. Status: {response.status_code}\nTime: {t01 - t00:.2f} s.")
+        print(
+            "Failed to submit number code. "
+            f"Status: {response.status_code}\nTime: {t01 - t00:.2f} s."
+        )
         return False
     except requests.RequestException as e:
         t01 = time.time()
-        print(f"Failed to submit number code: {e}\nTime: {t01 - t00:.2f} s.")
+        print(
+            f"Failed to submit number code: {type(e).__name__}\n"
+            f"Time: {t01 - t00:.2f} s."
+        )
         return False
 
-def send_radar(in_session, rollcall_id):
+def send_radar(in_session, rollcall_id, location=None, radar_points=None):
     url = f"{base_url}/api/rollcall/{rollcall_id}/answer"
 
     lat_1, lat_2 = 24.3, 24.6
     lon_1, lon_2 = 118.0, 118.2
+    device_id = str(uuid.uuid4())
+    last_status = None
 
     def payload(lat, lon):
         return {
             "accuracy": 35,
             "altitude": 0,
             "altitudeAccuracy": None,
-            "deviceId": str(uuid.uuid4()),
+            "deviceId": device_id,
             "heading": None,
             "latitude": lat,
             "longitude": lon,
             "speed": None
         }
 
-    res_1 = in_session.put(url, json=payload(lat_1, lon_1), headers=headers)
-    data_1 = res_1.json()
+    def answer(lat, lon, require_distance=True):
+        nonlocal last_status
+        last_status = None
+        try:
+            response = in_session.put(
+                url, json=payload(lat, lon), headers=in_session.headers, timeout=10
+            )
+        except requests.RequestException as error:
+            print(f"Radar request failed: {type(error).__name__}")
+            return False, None
+        last_status = response.status_code
+        # Successful responses need not contain JSON or a distance.
+        if response.status_code == 200:
+            return True, None
+        if response.status_code in (401, 403):
+            print(f"Radar request denied (HTTP {response.status_code}); check login/permissions.")
+            return False, None
+        if not require_distance:
+            print(f"Radar point not accepted (HTTP {response.status_code}).")
+            return False, None
+        try:
+            data = response.json()
+        except ValueError:
+            print(f"Radar response is not JSON (HTTP {response.status_code}).")
+            return False, None
+        distance = data.get("distance") if isinstance(data, dict) else None
+        try:
+            if isinstance(distance, bool):
+                raise ValueError
+            distance = float(distance)
+            if not math.isfinite(distance) or distance < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            keys = ", ".join(sorted(data)) if isinstance(data, dict) else type(data).__name__
+            print(
+                f"Radar response has no usable distance (HTTP {response.status_code}; "
+                f"fields: {keys}). The old location solver cannot continue; "
+                "provide your actual --latitude/--longitude, or use the official client."
+            )
+            return False, None
+        return False, distance
 
-    if res_1.status_code == 200:
+    if radar_points:
+        for index, point in enumerate(radar_points):
+            if index:
+                time.sleep(5)
+            print(f"Radar point {index + 1}/{len(radar_points)}: {point['name']}")
+            success, _ = answer(point["latitude"], point["longitude"], require_distance=False)
+            if success:
+                print("Radar rollcall answered successfully.")
+                return True
+            if last_status not in (400, 422):
+                print("Stopping this point round after a network, authentication, or server error.")
+                return False
+        # Keep at least five seconds between the last point and the next round.
+        time.sleep(5)
+        print("None of the configured radar points was accepted; monitoring will retry later.")
+        return False
+
+    if location is not None:
+        success, _ = answer(*location, require_distance=False)
+        return success
+
+    success, distance_1 = answer(lat_1, lon_1)
+    if success:
         return True
-
-    res_2 = in_session.put(url, json=payload(lat_2, lon_2), headers=headers)
-    data_2 = res_2.json()
-
-    if res_2.status_code == 200:
+    if distance_1 is None:
+        return False
+    success, distance_2 = answer(lat_2, lon_2)
+    if success:
         return True
-
-    distance_1 = data_1.get("distance")
-    distance_2 = data_2.get("distance")
+    if distance_2 is None:
+        return False
 
     def latlon_to_xy(lat, lon, lat0, lon0):
         R = 6371000
@@ -143,7 +302,7 @@ def send_radar(in_session, rollcall_id):
             return None
 
         a = (d1**2 - d2**2 + D**2) / (2 * D)
-        h = math.sqrt(d1**2 - a**2)
+        h = math.sqrt(max(0, d1**2 - a**2))
 
         xm = x1 + a * (x2 - x1) / D
         ym = y1 + a * (y2 - y1) / D
@@ -175,16 +334,13 @@ def send_radar(in_session, rollcall_id):
     else:
         return False
 
-    payload_1 = payload(sol_x_1, sol_y_1)
-    payload_2 = payload(sol_x_2, sol_y_2)
-
-    res_3 = in_session.put(url, json=payload_1, headers=headers)
-    if res_3.status_code == 200:
+    success, distance = answer(sol_x_1, sol_y_1)
+    if success:
         return True
-    else:
-        print(res_3.json())
-        res_4 = in_session.put(url, json=payload_2, headers=headers)
-        if res_4.status_code == 200:
-            return True
+    if distance is None:
+        return False
+    success, _ = answer(sol_x_2, sol_y_2)
+    if success:
+        return True
 
     return False

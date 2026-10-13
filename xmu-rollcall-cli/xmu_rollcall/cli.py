@@ -1,5 +1,8 @@
 import click
 import sys
+import json
+import math
+from pathlib import Path
 from xmulogin import xmulogin
 from . import __version__
 from .config import (
@@ -8,6 +11,8 @@ from .config import (
     get_account_by_id, CONFIG_FILE, delete_account, perform_account_deletion
 )
 from .monitor import start_monitor, base_url, headers
+
+DEFAULT_RADAR_POINTS_FILE = Path(__file__).with_name("radar_points.json")
 
 # ANSI Color codes
 class Colors:
@@ -180,8 +185,47 @@ def config():
             break
 
 @cli.command()
-def start():
+@click.option("--latitude", type=click.FloatRange(-90, 90), help="Your actual latitude for radar rollcalls; use with --longitude.")
+@click.option("--longitude", type=click.FloatRange(-180, 180), help="Your actual longitude for radar rollcalls; use with --latitude.")
+@click.option("--radar-points", type=click.Path(exists=True, dir_okay=False), help="Override the default five Xiang'an campus radar points with a WGS84 JSON file.")
+def start(latitude, longitude, radar_points):
     """启动签到监控"""
+    if (latitude is None) != (longitude is None):
+        raise click.UsageError("--latitude and --longitude must be provided together.")
+    location = None if latitude is None else (latitude, longitude)
+    if location is not None and not all(math.isfinite(value) for value in location):
+        raise click.UsageError("Coordinates must be finite numbers.")
+    if radar_points is not None and location is not None:
+        raise click.UsageError("Use either --radar-points or --latitude/--longitude.")
+    if radar_points is None and location is None:
+        radar_points = str(DEFAULT_RADAR_POINTS_FILE)
+    points = None
+    if radar_points is not None:
+        try:
+            with open(radar_points, encoding="utf-8-sig") as file:
+                data = json.load(file)
+            if not isinstance(data, dict) or data.get("coordinate_system") != "WGS84":
+                raise ValueError("coordinate_system must be WGS84")
+            if not isinstance(data.get("points"), list):
+                raise ValueError("points must be a list")
+            points = []
+            for point in data["points"]:
+                if not isinstance(point, dict) or not isinstance(point.get("name"), str) or not point["name"].strip():
+                    raise ValueError("each point needs a name")
+                lat, lon = point.get("latitude"), point.get("longitude")
+                if lat is None and lon is None:
+                    click.echo(f"Skipping unconfigured point: {point['name']}")
+                    continue
+                if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in (lat, lon)):
+                    raise ValueError("each configured point needs two finite numeric coordinates")
+                if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                    raise ValueError("coordinates out of range")
+                points.append({"name": point["name"], "latitude": lat, "longitude": lon})
+            if not points:
+                raise ValueError("no configured points; fill in latitude and longitude first")
+        except (OSError, ValueError) as error:
+            raise click.UsageError(f"Invalid radar points file: {error}") from None
+        click.echo(f"Radar point polling enabled: {len(points)} points, 5 seconds between points.")
     # 加载配置
     config_data = load_config()
 
@@ -197,7 +241,7 @@ def start():
 
     # 启动监控
     try:
-        start_monitor(current_account)
+        start_monitor(current_account, location, points)
     except KeyboardInterrupt:
         click.echo(f"\n{Colors.WARNING}Shutting down...{Colors.ENDC}")
         sys.exit(0)
