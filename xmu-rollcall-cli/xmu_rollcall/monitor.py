@@ -76,7 +76,7 @@ def print_banner():
     width = get_terminal_width()
     line = '=' * width
 
-    title1 = "XMU Rollcall Bot CLI | CatNebulaaaa Fork"
+    title1 = "XMU Rollcall Bot CLI"
     title2 = f"Version {__version__}"
 
     print(f"{Colors.OKCYAN}{line}{Colors.ENDC}")
