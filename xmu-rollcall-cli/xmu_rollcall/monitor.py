@@ -4,6 +4,7 @@ import sys
 import requests
 import shutil
 import re
+import unicodedata
 from xmulogin import xmulogin
 from . import __version__
 from .utils import clear_screen, save_session, load_session, verify_session
@@ -124,7 +125,31 @@ def print_footer_text(color_offset=0):
     colored = get_colorful_text(text, color_offset)
     print(center_text(colored))
 
-def print_dashboard(name, start_time, query_count, banner_frame=0, show_banner=True):
+def print_last_rollcall(last_rollcall):
+    """Render a fixed-height panel that survives dashboard redraws."""
+    print(f"{Colors.BOLD}LAST ROLLCALL{Colors.ENDC}")
+    print_separator()
+    latest = last_rollcall or {}
+    lines = [
+        f"Course: {latest.get('course_title', '-')}",
+        f"Type: {latest.get('rollcall_type', '-')} | Started: {latest.get('rollcall_time') or '-'}",
+        f"Result: {latest.get('result', 'Waiting for first rollcall...')}",
+        f"Number Code: {latest.get('number_code') or '-'}",
+    ]
+    width = max(1, get_terminal_width() - 1)
+    for line in lines:
+        # Keep long course names or embedded line breaks from shifting cursor rows.
+        text, used = '', 0
+        for char in ' '.join(line.split()):
+            used += 2 if unicodedata.east_asian_width(char) in ('W', 'F') else 1
+            if used > width:
+                break
+            text += char
+        print(f"{Colors.OKCYAN}{text}{Colors.ENDC}")
+    print_separator()
+
+
+def print_dashboard(name, start_time, query_count, banner_frame=0, show_banner=True, last_rollcall=None):
     """打印主仪表板"""
     clear_screen()
     print_banner()
@@ -154,7 +179,7 @@ def print_dashboard(name, start_time, query_count, banner_frame=0, show_banner=T
     print(f"{Colors.OKGREEN}Status:{Colors.ENDC} Active - Monitoring for new rollcalls...")
     print(f"{Colors.GRAY}Checking every {interval} second(s){Colors.ENDC}")
     print(f"{Colors.GRAY}Press Ctrl+C to exit{Colors.ENDC}\n")
-    print_separator()
+    print_last_rollcall(last_rollcall)
 
     if show_banner:
         print()
@@ -170,7 +195,7 @@ def print_login_status(message, is_success=True):
 TIME_LINE = 10
 RUNTIME_LINE = 11
 QUERY_LINE = 12
-FOOTER_LINE = 20
+FOOTER_LINE = 28
 
 def update_status_line(line_num, label, value, color):
     """更新指定行的状态信息，不清屏"""
@@ -264,6 +289,7 @@ def start_monitor(account, location=None, radar_points=None):
     temp_data = {'rollcalls': []}
     query_count = 0
     start_time = time.time()
+    last_rollcall = {}
 
     print_dashboard(ACCOUNT_NAME, start_time, query_count, 0, show_banner=False)
 
@@ -305,14 +331,14 @@ def start_monitor(account, location=None, radar_points=None):
                             print(f"\n{Colors.WARNING}{Colors.BOLD}{'!' * width}{Colors.ENDC}")
                             print(center_text(f"{Colors.WARNING}{Colors.BOLD}NEW ROLLCALL DETECTED{Colors.ENDC}"))
                             print(f"{Colors.WARNING}{Colors.BOLD}{'!' * width}{Colors.ENDC}\n")
-                            temp_data = process_rollcalls(temp_data, session, location, radar_points)
+                            temp_data = process_rollcalls(temp_data, session, location, radar_points, last_rollcall)
                             print_separator("=")
                             print(f"\n{center_text(f'{Colors.GRAY}Press Ctrl+C to exit, continuing monitor...{Colors.ENDC}')}\n")
                             try:
                                 time.sleep(3)
                             except KeyboardInterrupt:
                                 raise
-                            print_dashboard(ACCOUNT_NAME, start_time, query_count, 0)
+                            print_dashboard(ACCOUNT_NAME, start_time, query_count, 0, last_rollcall=last_rollcall)
             except KeyboardInterrupt:
                 raise
             except Exception as e:

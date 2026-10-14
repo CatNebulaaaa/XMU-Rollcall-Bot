@@ -187,7 +187,7 @@ def test_handler_passes_course_metadata_to_number_api():
     session = Mock()
     with patch.object(rollcall_handler, "send_code", return_value=True) as send:
         assert rollcall_handler.handle_rollcalls({"rollcalls": [rollcall]}, session) == [True]
-    send.assert_called_once_with(session, 42, 8, "2026-10-10T07:00:00Z")
+    send.assert_called_once_with(session, 42, 8, "2026-10-10T07:00:00Z", result={})
 
 
 POINTS = [

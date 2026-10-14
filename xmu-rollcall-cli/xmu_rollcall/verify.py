@@ -116,7 +116,7 @@ def get_timetable_number_code(
 
 
 def send_code(
-    in_session, rollcall_id, course_id=None, rollcall_time=None
+    in_session, rollcall_id, course_id=None, rollcall_time=None, result=None
 ):
     code_url = f"{base_url}/api/rollcall/{rollcall_id}/student_rollcalls"
     answer_url = f"{base_url}/api/rollcall/{rollcall_id}/answer_number_rollcall"
@@ -163,6 +163,8 @@ def send_code(
         "deviceId": str(uuid.uuid4()),
         "numberCode": number_code
     }
+    if result is not None:
+        result["number_code"] = number_code
     try:
         response = in_session.put(
             answer_url, json=payload, headers=request_headers, timeout=10

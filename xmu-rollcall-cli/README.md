@@ -2,6 +2,8 @@
 
 **CatNebulaaaa Fork** — based on [KrsMt-0113/XMU-Rollcall-Bot](https://github.com/KrsMt-0113/XMU-Rollcall-Bot), with timetable number-code fallback and five Xiang'an campus radar presets enabled by plain `xmu start`. Original author credit and the MIT license are preserved.
 
+The `LAST ROLLCALL` dashboard panel retains the latest course, start time, result, and number code until the next rollcall. Codes keep leading zeros and survive status changes and empty API lists; restarting the program clears the panel.
+
 A command-line tool for monitoring and auto-answering Tronclass rollcalls at Xiamen University.
 
 > This project is intended for personal learning and automation convenience. Use it at your own risk and comply with your school's rules.

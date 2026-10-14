@@ -7,6 +7,7 @@
 - 数字签到：旧 `student_rollcalls` 接口缺码时，查询 `timetable_rollcalls`，传入课程 ID 和签到的 UTC 日期，并按签到 ID 精确匹配。
 - 雷达签到：普通 `xmu start` 默认启用五个翔安校区点位轮询，不依赖接口返回距离；点位间隔 5 秒，成功立即停止。
 - 启动标题为 `XMU Rollcall Bot CLI`，底部显示 `Fork by CatNebulaaaa` 并保留 `KrsMt` 原作者署名。
+- 数字签到后，TUI 的 `LAST ROLLCALL` 区域持续显示课程、签到时间、结果和签到码；下一次签到出现时更新，列表清空或同一次签到状态变化不会清除签到码。重新启动程序后从空白状态开始。
 - 处理缺距离、非法 JSON、超时、登录拒绝和点位文件错误，避免原来的 `NoneType` 计算崩溃。
 
 ## 安装与启动
