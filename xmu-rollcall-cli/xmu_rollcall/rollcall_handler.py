@@ -67,6 +67,7 @@ def handle_rollcalls(data, session, location=None, radar_points=None, last_rollc
         print(time.strftime("%H:%M:%S", time.localtime()), f"New rollcall(s) found!\n")
         for i in range(count):
             number_result = {}
+            radar_result = {}
             print(f"{i+1} of {count}:")
             print(f"Course name: {rollcalls[i]['course_title']}, rollcall created by {rollcalls[i]['department_name']} {rollcalls[i]['created_by_name']}.")
 
@@ -97,7 +98,7 @@ def handle_rollcalls(data, session, location=None, radar_points=None, last_rollc
                 print("Already answered.")
                 answer_status[i] = True
             elif rollcalls[i]['is_radar']:
-                if send_radar(session, rollcalls[i]['rollcall_id'], location, radar_points):
+                if send_radar(session, rollcalls[i]['rollcall_id'], location, radar_points, result=radar_result):
                     answer_status[i] = True
                 else:
                     print("Answering failed.")
@@ -108,6 +109,8 @@ def handle_rollcalls(data, session, location=None, radar_points=None, last_rollc
             result = "Answered successfully" if answer_status[i] else "Answering failed"
             if rollcalls[i]['status'] == 'on_call_fine':
                 result = "Already answered"
+            elif radar_result.get('detail'):
+                result = radar_result['detail']
             remember_rollcall(last_rollcall, rollcalls[i], temp_str, result, number_result.get('number_code'))
 
     return answer_status

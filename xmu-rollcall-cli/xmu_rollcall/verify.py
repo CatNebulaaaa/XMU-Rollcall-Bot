@@ -191,13 +191,48 @@ def send_code(
         )
         return False
 
-def send_radar(in_session, rollcall_id, location=None, radar_points=None):
+def radar_error_reason(data):
+    """Classify server errors without logging response text or account data."""
+    messages = []
+
+    def collect(value, depth=0):
+        if depth > 4:
+            return
+        if isinstance(value, str):
+            messages.append(value[:1000].lower())
+        elif isinstance(value, dict):
+            for key in ("code", "error_code", "errorCode", "error_type", "type", "error", "errors", "message", "msg", "detail"):
+                if key in value:
+                    collect(value[key], depth + 1)
+        elif isinstance(value, list):
+            for item in value[:5]:
+                collect(item, depth + 1)
+
+    collect(data)
+    text = ' '.join(messages)
+    reasons = (
+        ("login or permission required", ("unauthorized", "forbidden", "login required", "token expired", "登录过期", "未登录", "无权限")),
+        ("outside signing range", ("out_of_range", "out of range", "outside", "too_far", "too far", "not_in_range", "not in range", "超出范围", "不在范围", "不在签到范围", "不在点名范围", "超出签到范围", "距离过远", "距离太远")),
+        ("rollcall ended or expired", ("rollcall_expired", "rollcall_ended", "rollcall_not_in_progress", "has ended", "点名已结束", "签到已结束", "点名过期")),
+        ("already answered", ("already_answered", "already_signed", "already answered", "already signed", "已签到", "已完成签到", "重复签到")),
+        ("device verification rejected", ("device_mismatch", "invalid_device", "device verification", "设备验证", "设备不匹配", "设备异常")),
+        ("invalid or missing location", ("invalid_location", "location_required", "invalid latitude", "invalid longitude", "location required", "定位失败", "定位信息", "经纬度无效")),
+        ("missing or invalid request fields", ("invalid_parameter", "missing_parameter", "required field", "missing field", "invalid parameter", "参数错误", "参数缺失", "参数不合法")),
+    )
+    for reason, patterns in reasons:
+        if any(pattern in text for pattern in patterns):
+            return reason
+    return "unrecognized server rejection"
+
+
+def send_radar(in_session, rollcall_id, location=None, radar_points=None, result=None):
     url = f"{base_url}/api/rollcall/{rollcall_id}/answer"
 
     lat_1, lat_2 = 24.3, 24.6
     lon_1, lon_2 = 118.0, 118.2
     device_id = str(uuid.uuid4())
     last_status = None
+    last_reason = None
 
     def payload(lat, lon):
         return {
@@ -212,29 +247,44 @@ def send_radar(in_session, rollcall_id, location=None, radar_points=None):
         }
 
     def answer(lat, lon, require_distance=True):
-        nonlocal last_status
+        nonlocal last_status, last_reason
         last_status = None
+        last_reason = None
         try:
             response = in_session.put(
                 url, json=payload(lat, lon), headers=in_session.headers, timeout=10
             )
         except requests.RequestException as error:
             print(f"Radar request failed: {type(error).__name__}")
+            if result is not None:
+                result['detail'] = "network request failed"
             return False, None
         last_status = response.status_code
         # Successful responses need not contain JSON or a distance.
         if response.status_code == 200:
+            if result is not None:
+                result['detail'] = "Answered successfully"
             return True, None
         if response.status_code in (401, 403):
             print(f"Radar request denied (HTTP {response.status_code}); check login/permissions.")
-            return False, None
-        if not require_distance:
-            print(f"Radar point not accepted (HTTP {response.status_code}).")
+            if result is not None:
+                result['detail'] = f"HTTP {response.status_code}: login or permission required"
             return False, None
         try:
             data = response.json()
         except ValueError:
             print(f"Radar response is not JSON (HTTP {response.status_code}).")
+            if result is not None:
+                result['detail'] = f"HTTP {response.status_code}: non-JSON response"
+            return False, None
+        last_reason = radar_error_reason(data)
+        detail = f"HTTP {response.status_code}: {last_reason}"
+        print(f"Radar point not accepted ({detail}).")
+        if result is not None:
+            result['detail'] = detail
+        if not require_distance:
+            return False, None
+        if response.status_code not in (400, 422) or last_reason not in ("outside signing range", "unrecognized server rejection"):
             return False, None
         distance = data.get("distance") if isinstance(data, dict) else None
         try:
@@ -264,6 +314,9 @@ def send_radar(in_session, rollcall_id, location=None, radar_points=None):
                 return True
             if last_status not in (400, 422):
                 print("Stopping this point round after a network, authentication, or server error.")
+                return False
+            if last_reason not in (None, "outside signing range", "unrecognized server rejection"):
+                print("Stopping this point round: changing location cannot resolve this rejection.")
                 return False
         # Keep at least five seconds between the last point and the next round.
         time.sleep(5)
