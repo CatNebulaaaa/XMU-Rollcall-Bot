@@ -126,7 +126,7 @@ def print_footer_text(color_offset=0):
     print(center_text(colored))
 
 def print_last_rollcall(last_rollcall):
-    """Render a fixed-height panel that survives dashboard redraws."""
+    """Retain the latest result and wrap diagnostic details without truncation."""
     print(f"{Colors.BOLD}LAST ROLLCALL{Colors.ENDC}")
     print_separator()
     latest = last_rollcall or {}
@@ -146,7 +146,39 @@ def print_last_rollcall(last_rollcall):
                 break
             text += char
         print(f"{Colors.OKCYAN}{text}{Colors.ENDC}")
+    diagnostic_lines = []
+    diagnostic = latest.get('radar_diagnostic')
+    if diagnostic:
+        status = diagnostic['http_status']
+        status_text = f'HTTP {status}' if status is not None else '无 HTTP 响应'
+        codes = diagnostic['error_codes'] + diagnostic['numeric_error_codes']
+        diagnostic_lines = [
+            f"上次脚本请求：{diagnostic['summary']}（{status_text}）",
+            f"错误码：{', '.join(codes) or '服务端未提供可安全展示的错误码'}",
+            f"建议：{diagnostic['advice']}",
+            f"脱敏诊断：{diagnostic.get('path') or '保存失败；请保留当前界面信息'}",
+        ]
+    for attempt in latest.get('radar_attempts', []):
+        codes = ', '.join(attempt['error_codes'])
+        diagnostic_lines.append(f"点位 {attempt['point']}：{attempt['summary']}" + (f" [{codes}]" if codes else ''))
+    extra_rows = 0
+    for line in diagnostic_lines:
+        text, used = '', 0
+        # Wrap rather than clip machine codes and paths. Strip terminal controls.
+        for char in ' '.join(strip_ansi(line).split()):
+            if unicodedata.category(char).startswith('C'):
+                continue
+            cells = 0 if unicodedata.combining(char) else 2 if unicodedata.east_asian_width(char) in ('W', 'F') else 1
+            if used + cells > width and text:
+                print(text)
+                extra_rows += 1
+                text, used = '', 0
+            text += char
+            used += cells
+        print(text)
+        extra_rows += 1
     print_separator()
+    return extra_rows
 
 
 def print_dashboard(name, start_time, query_count, banner_frame=0, show_banner=True, last_rollcall=None):
@@ -179,7 +211,10 @@ def print_dashboard(name, start_time, query_count, banner_frame=0, show_banner=T
     print(f"{Colors.OKGREEN}Status:{Colors.ENDC} Active - Monitoring for new rollcalls...")
     print(f"{Colors.GRAY}Checking every {interval} second(s){Colors.ENDC}")
     print(f"{Colors.GRAY}Press Ctrl+C to exit{Colors.ENDC}\n")
-    print_last_rollcall(last_rollcall)
+    extra_rows = print_last_rollcall(last_rollcall)
+    global FOOTER_LINE, DASHBOARD_FITS
+    FOOTER_LINE = 28 + extra_rows
+    DASHBOARD_FITS = FOOTER_LINE <= shutil.get_terminal_size().lines
 
     if show_banner:
         print()
@@ -196,9 +231,12 @@ TIME_LINE = 10
 RUNTIME_LINE = 11
 QUERY_LINE = 12
 FOOTER_LINE = 28
+DASHBOARD_FITS = True
 
 def update_status_line(line_num, label, value, color):
     """更新指定行的状态信息，不清屏"""
+    if not DASHBOARD_FITS:
+        return
     sys.stdout.write("\033[?25l")
     sys.stdout.write("\033[s")
     sys.stdout.write(f"\033[{line_num};0H")
@@ -210,6 +248,8 @@ def update_status_line(line_num, label, value, color):
 
 def update_footer_text():
     """更新底部彩色文字，不清屏"""
+    if not DASHBOARD_FITS:
+        return
     text = FORK_CREDIT
     colored = get_colorful_text(text, 0)
     width = get_terminal_width()

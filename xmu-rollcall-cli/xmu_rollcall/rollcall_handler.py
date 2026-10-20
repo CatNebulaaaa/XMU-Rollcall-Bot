@@ -112,6 +112,9 @@ def handle_rollcalls(data, session, location=None, radar_points=None, last_rollc
             elif radar_result.get('detail'):
                 result = radar_result['detail']
             remember_rollcall(last_rollcall, rollcalls[i], temp_str, result, number_result.get('number_code'))
+            if last_rollcall is not None and last_rollcall.get('rollcall_id') == rollcalls[i]['rollcall_id'] and radar_result:
+                last_rollcall['radar_diagnostic'] = radar_result.get('diagnostic')
+                last_rollcall['radar_attempts'] = radar_result.get('attempts', [])
 
     return answer_status
 

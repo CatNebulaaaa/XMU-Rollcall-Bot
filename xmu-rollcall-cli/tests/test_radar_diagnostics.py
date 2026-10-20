@@ -28,6 +28,8 @@ def test_outside_range_response_is_read_and_next_point_can_succeed(capsys):
     first.json.assert_called_once()
     assert session.put.call_count == 2
     assert result['detail'] == "Answered successfully"
+    assert result['attempts'][-1]['summary'] == '签到成功'
+    assert 'diagnostic' not in result
     output = capsys.readouterr().out
     assert "HTTP 400: outside signing range" in output
     assert "PRIVATE_ACCOUNT_DATA" not in output
@@ -132,3 +134,85 @@ def test_unknown_rejection_saves_safe_structure_without_response_private_values(
     assert report['error_codes'] == ['radar_new_rejection']
     assert report['error_structure']['result']['message'] == '<str>'
     assert report['error_structure']['result']['code'] == 40021
+
+
+@pytest.mark.parametrize('status, payload, reason, summary', [
+    (400, {'error_code': 'radar_out_of_rollcall_scope'}, 'outside signing range', '当前位置不在签到范围内'),
+    (400, {'error_code': 'rollcall_device_already_in_use'}, 'device verification rejected', '设备标识已被占用'),
+    (400, {'error_code': 'rollcall_position_invalid'}, 'invalid or missing location', '定位信息缺失或无效'),
+    (400, {'error_code': 'rollcall_beacon_nonce_invalid'}, 'Bluetooth beacon validation failed', '蓝牙信标校验未通过'),
+    (401, {}, 'login or permission required', '登录失效或没有操作权限'),
+    (403, {}, 'login or permission required', '登录失效或没有操作权限'),
+    (429, {'error_code': 'radar_out_of_rollcall_scope'}, 'too many requests', '请求过于频繁'),
+    (503, {'error_code': 'radar_out_of_rollcall_scope'}, 'server error', '畅课服务端或网关出错'),
+    (404, {}, 'endpoint or rollcall not found', '接口或本次点名不存在'),
+])
+def test_actionable_diagnostics_preserve_codes_and_distinguish_http_errors(tmp_path, status, payload, reason, summary):
+    session = Mock(headers={})
+    session.put.return_value = response(payload, status)
+    result = {}
+    with patch('xmu_rollcall.config.CONFIG_DIR', tmp_path):
+        assert not verify.send_radar(session, 42, location=(24.45, 118.12), result=result)
+    diagnostic = result['diagnostic']
+    assert diagnostic['reason'] == reason
+    assert summary in diagnostic['summary']
+    assert diagnostic['advice']
+    assert diagnostic['path'] == str(tmp_path / 'radar_last_rejection.json')
+    saved = json.loads((tmp_path / 'radar_last_rejection.json').read_text(encoding='utf-8'))
+    assert saved['summary'] == diagnostic['summary']
+    if payload.get('error_code'):
+        assert payload['error_code'] in diagnostic['error_codes']
+
+
+def test_unknown_diagnostic_keeps_numeric_string_code_but_not_raw_message(tmp_path, capsys):
+    session = Mock(headers={})
+    session.put.return_value = response({'data': {'error': {'code': '40021',
+        'message': 'PRIVATE_NAME PRIVATE_COOKIE', 'token': 'radar_private_token'}}})
+    result = {}
+    with patch('xmu_rollcall.config.CONFIG_DIR', tmp_path):
+        assert not verify.send_radar(session, 42, location=(24.45, 118.12), result=result)
+    diagnostic = result['diagnostic']
+    assert diagnostic['numeric_error_codes'] == ['40021']
+    assert '不能判定为距离问题' in diagnostic['advice']
+    output = capsys.readouterr().out
+    saved = (tmp_path / 'radar_last_rejection.json').read_text(encoding='utf-8')
+    assert '40021' in output
+    assert 'PRIVATE_' not in saved + output + json.dumps(result)
+    assert 'radar_private_token' not in saved + output + json.dumps(result)
+
+
+def test_diagnostic_write_failure_does_not_hide_the_rejection(tmp_path, capsys):
+    blocked = tmp_path / 'not-a-directory'
+    blocked.write_text('test', encoding='utf-8')
+    session = Mock(headers={})
+    session.put.return_value = response({'error_code': 'radar_new_rejection'})
+    result = {}
+    with patch('xmu_rollcall.config.CONFIG_DIR', blocked):
+        assert not verify.send_radar(session, 42, location=(24.45, 118.12), result=result)
+    assert result['diagnostic']['path'] is None
+    assert result['diagnostic']['error_codes'] == ['radar_new_rejection']
+    assert '保存失败' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize('status, reason', [(400, 'non-JSON response'), (502, 'server error'), (401, 'login or permission required')])
+def test_non_json_response_has_status_specific_advice_without_body(tmp_path, status, reason):
+    session = Mock(headers={})
+    session.put.return_value = response(None, status)
+    session.put.return_value.json.side_effect = ValueError('PRIVATE_BODY')
+    result = {}
+    with patch('xmu_rollcall.config.CONFIG_DIR', tmp_path):
+        assert not verify.send_radar(session, 42, location=(24.45, 118.12), result=result)
+    assert result['diagnostic']['reason'] == reason
+    assert 'PRIVATE_' not in json.dumps(result)
+
+
+def test_timeout_retains_diagnostic_without_exception_details(tmp_path):
+    import requests
+    session = Mock(headers={})
+    session.put.side_effect = requests.Timeout('PRIVATE_URL_WITH_TOKEN')
+    result = {}
+    with patch('xmu_rollcall.config.CONFIG_DIR', tmp_path):
+        assert not verify.send_radar(session, 42, location=(24.45, 118.12), result=result)
+    assert result['diagnostic']['reason'] == 'network timeout'
+    assert result['diagnostic']['http_status'] is None
+    assert 'PRIVATE_' not in json.dumps(result)

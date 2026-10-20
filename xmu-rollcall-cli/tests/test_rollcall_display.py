@@ -115,3 +115,59 @@ def test_monitor_retains_code_across_status_change_and_empty_list_then_updates_n
     assert "0031" not in snapshots[3]
     assert "Radar course" in snapshots[4] and "Number Code: -" in snapshots[4]
     assert "0042" not in snapshots[4]
+
+
+@pytest.mark.parametrize('width', [40, 80])
+def test_radar_diagnostic_survives_refresh_and_wraps_complete_code_and_path(tmp_path, width):
+    import unicodedata
+    item = rollcall(is_number=False, is_radar=True)
+    session = Mock(headers={})
+    session.put.return_value = response({'error_code': 'rollcall_beacon_nonce_invalid', 'message': 'PRIVATE_BODY'}, 400)
+    latest = {}
+    points = [dict(name='学武楼', latitude=24.6083073, longitude=118.3090821)]
+    with patch('xmu_rollcall.config.CONFIG_DIR', tmp_path):
+        rollcall_handler.process_rollcalls({'rollcalls': [item]}, session, radar_points=points, last_rollcall=latest)
+    rollcall_handler.process_rollcalls({'rollcalls': []}, session, last_rollcall=latest)
+    output = io.StringIO()
+    with patch.object(monitor, 'clear_screen'), \
+            patch.object(monitor, 'get_terminal_width', return_value=width), \
+            patch.object(monitor.shutil, 'get_terminal_size', return_value=os.terminal_size((width, 120))), \
+            redirect_stdout(output):
+        monitor.print_dashboard('Test', 0, 5, last_rollcall=latest)
+    lines = monitor.strip_ansi(output.getvalue()).splitlines()
+    assert len(lines) == monitor.FOOTER_LINE
+    panel = lines[25:lines.index('-' * width, 25)]
+    continuous = ''.join(panel)
+    assert '蓝牙信标校验未通过' in continuous
+    assert 'rollcall_beacon_nonce_invalid' in continuous
+    assert str(tmp_path / 'radar_last_rejection.json') in continuous
+    assert '点位 学武楼' in continuous
+    assert 'PRIVATE_' not in continuous
+    assert all(sum(0 if unicodedata.combining(c) else 2 if unicodedata.east_asian_width(c) in ('W', 'F') else 1 for c in line) <= width - 1 for line in panel)
+
+
+def test_phone_completion_keeps_prior_script_failure_distinct_then_next_rollcall_clears_it(tmp_path):
+    item = rollcall(is_number=False, is_radar=True)
+    session = Mock(headers={})
+    session.put.return_value = response({'error_code': 'radar_out_of_rollcall_scope'}, 400)
+    latest = {}
+    points = [dict(name='Test', latitude=24.45, longitude=118.12)]
+    with patch('xmu_rollcall.config.CONFIG_DIR', tmp_path), patch.object(verify.time, 'sleep'):
+        rollcall_handler.process_rollcalls({'rollcalls': [item]}, session, radar_points=points, last_rollcall=latest)
+    diagnostic = latest['radar_diagnostic']
+    rollcall_handler.process_rollcalls({'rollcalls': [dict(item, status='on_call_fine')]}, session, last_rollcall=latest)
+    assert latest['result'] == 'Already answered'
+    assert latest['radar_diagnostic'] is diagnostic
+    assert session.put.call_count == 1
+    next_item = rollcall(43, rollcall_time='2026-10-14T08:00:00Z', status='on_call_fine')
+    rollcall_handler.process_rollcalls({'rollcalls': [next_item]}, session, last_rollcall=latest)
+    assert 'radar_diagnostic' not in latest
+    assert 'radar_attempts' not in latest
+
+
+def test_short_terminal_does_not_overwrite_scrolled_diagnostics():
+    output = io.StringIO()
+    with patch.object(monitor, 'DASHBOARD_FITS', False), redirect_stdout(output):
+        monitor.update_status_line(monitor.TIME_LINE, 'Time:', 'Test', monitor.Colors.OKCYAN)
+        monitor.update_footer_text()
+    assert output.getvalue() == ''

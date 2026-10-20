@@ -228,10 +228,10 @@ def radar_error_reason(data):
     return "unrecognized server rejection"
 
 
-def save_radar_rejection(data, status):
-    """Retain only response structure and machine error codes, never raw values."""
-    from .config import CONFIG_DIR
+def radar_diagnostic(data, status, reason=None):
+    """Explain a rejection using only bounded, safe machine codes."""
     codes = []
+    numeric_codes = []
 
     def shape(value, key='', depth=0):
         if depth > 5:
@@ -245,18 +245,63 @@ def save_radar_rejection(data, status):
             return [shape(item, key, depth + 1) for item in value[:3]]
         if isinstance(value, str) and key in ('', 'error', 'error_code', 'errorCode', 'code', 'message', 'msg', 'detail', 'description', 'error_description', 'status', 'type'):
             codes.extend(re.findall(r'\b(?:radar|rollcall)_[a-z0-9_]{1,64}\b', value[:1000]))
+            if value in ('out_of_range', 'invalid_parameter', 'missing_parameter', 'device_mismatch', 'invalid_location', 'unauthorized', 'forbidden'):
+                codes.append(value)
         if key in ('error_code', 'errorCode', 'code') and type(value) is int and -999999 <= value <= 999999:
+            numeric_codes.append(str(value))
+            return value
+        if key in ('error_code', 'errorCode', 'code') and isinstance(value, str) and re.fullmatch(r'-?[0-9]{1,6}', value):
+            numeric_codes.append(value)
             return value
         return '<' + type(value).__name__ + '>'
 
     report = {'http_status': status, 'captured_at': datetime.now(timezone.utc).isoformat(),
+              'method': 'PUT', 'endpoint': '/api/rollcall/<id>/answer?api_version=1.76',
               'error_structure': shape(data), 'error_codes': sorted(set(codes))}
+    if status in (401, 403):
+        reason = 'login or permission required'
+    elif status == 429:
+        reason = 'too many requests'
+    elif status is not None and status >= 500:
+        reason = 'server error'
+    elif status == 404:
+        reason = 'endpoint or rollcall not found'
+    reason = reason or radar_error_reason(data)
+    descriptions = {
+        'outside signing range': ('当前位置不在签到范围内', '确认实际教室位置；楼宇中心可能不在签到半径内。'),
+        'rollcall ended or expired': ('点名已结束或已过期', '本次点名已不能提交，请核对点名状态。'),
+        'already answered': ('服务端表示已经签到', '请在官方 App 核对记录；此响应不能证明是脚本完成的。'),
+        'device verification rejected': ('设备校验未通过', '请用官方 App 完成签到；保留错误码以核查设备标识兼容性。'),
+        'invalid or missing location': ('定位信息缺失或无效', '检查点位文件是否使用 WGS84、经纬度是否填反；也可能是定位字段不兼容。'),
+        'Bluetooth beacon validation failed': ('蓝牙信标校验未通过', '需要现场蓝牙验证，请用官方 App 开启蓝牙后签到。'),
+        'missing or invalid request fields': ('请求参数缺失或无效', '这是接口参数问题，换点位通常无效；请保留错误码和诊断文件。'),
+        'login or permission required': ('登录失效或没有操作权限', '重新登录后再试；若仍为 HTTP 403，请核对课程权限。'),
+        'too many requests': ('请求过于频繁，服务端已限流', '请暂停重试，稍后再试；换点位不能解除限流。'),
+        'server error': ('畅课服务端或网关出错', '请稍后再试；这类状态不能用于判断点位是否正确。'),
+        'endpoint or rollcall not found': ('接口或本次点名不存在', '点名可能已失效，也可能是接口路径变化；请保留诊断文件。'),
+        'non-JSON response': ('接口返回了无法解析的内容', '可能是登录页、网关页面或接口格式变化；不能据此判断距离。'),
+        'network timeout': ('请求超时，未收到签到结果', '请先在官方 App 核对是否已签到，再检查网络。'),
+        'network request failed': ('网络请求失败，未取得服务端结果', '检查网络后重试；当前无法判断是否在签到范围。'),
+        'unrecognized server rejection': ('服务器拒绝请求，原因尚未识别', '不能判定为距离问题；请查看下方错误码和脱敏诊断文件。'),
+    }
+    summary, advice = descriptions[reason]
+    if 'rollcall_device_already_in_use' in codes:
+        summary = '设备标识已被占用'
+    report.update(reason=reason, summary=summary, advice=advice,
+                  numeric_error_codes=sorted(set(numeric_codes)))
+    return report
+
+
+def save_radar_rejection(report):
+    """Save a sanitized diagnostic and return its actual path, or None."""
+    from .config import CONFIG_DIR
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        (CONFIG_DIR / 'radar_last_rejection.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
-        print('Sanitized radar diagnostic saved as radar_last_rejection.json in the XMU config directory.')
+        path = CONFIG_DIR / 'radar_last_rejection.json'
+        path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding='utf-8')
+        return str(path.absolute())
     except OSError:
-        print('Could not save the sanitized radar diagnostic.')
+        return None
 
 
 def wgs84_to_gcj02(latitude, longitude):
@@ -291,6 +336,26 @@ def send_radar(in_session, rollcall_id, location=None, radar_points=None, result
     last_status = None
     last_reason = None
 
+    def reject(data, reason=None, point_name='指定位置'):
+        diagnostic = radar_diagnostic(data, last_status, reason)
+        diagnostic['path'] = save_radar_rejection(diagnostic)
+        diagnostic['point'] = point_name
+        status_text = f'HTTP {last_status}' if last_status is not None else '无 HTTP 响应'
+        detail = f"{status_text}: {diagnostic['reason']}"
+        code_text = ', '.join(diagnostic['error_codes'] + diagnostic['numeric_error_codes']) or '服务端未提供可安全展示的错误码'
+        print(f"雷达签到失败：{diagnostic['summary']}（{detail}）。")
+        print(f"错误码：{code_text}")
+        print(f"建议：{diagnostic['advice']}")
+        print(f"脱敏诊断：{diagnostic['path'] or '保存失败；当前界面仍保留原因和错误码'}")
+        if result is not None:
+            result['detail'] = detail
+            result['diagnostic'] = diagnostic
+            result.setdefault('attempts', []).append({
+                'point': point_name, 'summary': diagnostic['summary'],
+                'http_status': last_status, 'error_codes': diagnostic['error_codes'] + diagnostic['numeric_error_codes'],
+            })
+        return diagnostic['reason']
+
     def payload(lat, lon):
         # CLI arguments and point files stay WGS84; convert once at the API boundary.
         lat, lon = wgs84_to_gcj02(lat, lon)
@@ -305,7 +370,7 @@ def send_radar(in_session, rollcall_id, location=None, radar_points=None, result
             "speed": None
         }
 
-    def answer(lat, lon, require_distance=True):
+    def answer(lat, lon, require_distance=True, point_name='指定位置'):
         nonlocal last_status, last_reason
         last_status = None
         last_reason = None
@@ -314,7 +379,7 @@ def send_radar(in_session, rollcall_id, location=None, radar_points=None, result
                 url, json=payload(lat, lon), headers=in_session.headers, timeout=10
             )
         except requests.RequestException as error:
-            print(f"Radar request failed: {type(error).__name__}")
+            reject(None, 'network timeout' if isinstance(error, requests.Timeout) else 'network request failed', point_name)
             if result is not None:
                 result['detail'] = "network request failed"
             return False, None
@@ -323,26 +388,17 @@ def send_radar(in_session, rollcall_id, location=None, radar_points=None, result
         if response.status_code == 200:
             if result is not None:
                 result['detail'] = "Answered successfully"
+                result.pop('diagnostic', None)
+                result.setdefault('attempts', []).append({
+                    'point': point_name, 'summary': '签到成功', 'http_status': 200, 'error_codes': [],
+                })
             return True, None
-        if response.status_code in (401, 403):
-            print(f"Radar request denied (HTTP {response.status_code}); check login/permissions.")
-            if result is not None:
-                result['detail'] = f"HTTP {response.status_code}: login or permission required"
-            return False, None
         try:
             data = response.json()
         except ValueError:
-            print(f"Radar response is not JSON (HTTP {response.status_code}).")
-            if result is not None:
-                result['detail'] = f"HTTP {response.status_code}: non-JSON response"
+            last_reason = reject(None, 'non-JSON response', point_name)
             return False, None
-        last_reason = radar_error_reason(data)
-        if last_reason == "unrecognized server rejection":
-            save_radar_rejection(data, response.status_code)
-        detail = f"HTTP {response.status_code}: {last_reason}"
-        print(f"Radar point not accepted ({detail}).")
-        if result is not None:
-            result['detail'] = detail
+        last_reason = reject(data, point_name=point_name)
         if not require_distance:
             return False, None
         if response.status_code not in (400, 422) or last_reason not in ("outside signing range", "unrecognized server rejection"):
@@ -369,7 +425,7 @@ def send_radar(in_session, rollcall_id, location=None, radar_points=None, result
             if index:
                 time.sleep(5)
             print(f"Radar point {index + 1}/{len(radar_points)}: {point['name']}")
-            success, _ = answer(point["latitude"], point["longitude"], require_distance=False)
+            success, _ = answer(point["latitude"], point["longitude"], require_distance=False, point_name=point['name'])
             if success:
                 print("Radar rollcall answered successfully.")
                 return True

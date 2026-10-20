@@ -4,6 +4,8 @@
 
 The `LAST ROLLCALL` dashboard panel retains the latest course, start time, result, and number code until the next rollcall. Codes keep leading zeros and survive status changes and empty API lists; restarting the program clears the panel.
 
+Radar failures retain a Chinese explanation, HTTP status, safe machine error codes, actionable advice, per-point results, and the actual sanitized diagnostic path in the dashboard. Long codes and paths wrap. Unknown errors are explicitly inconclusive about distance; authentication, rate limiting, server errors, non-JSON responses, and timeouts have separate advice. Raw response messages and credentials are never saved. Phone completion does not turn an earlier script failure into script success.
+
 Radar location inputs remain WGS84. Requests convert them once to GCJ-02 using the official mobile client's algorithm and use `api_version=1.76`. See the repository's `RADAR_COMPATIBILITY.md` for source provenance and verification limits.
 
 A command-line tool for monitoring and auto-answering Tronclass rollcalls at Xiamen University.
