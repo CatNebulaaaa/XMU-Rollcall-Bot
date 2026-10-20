@@ -1,4 +1,5 @@
 import os
+import json
 from unittest.mock import Mock, patch
 
 os.environ["XMU_ROLLCALL_CONFIG_DIR"] = os.path.join(os.path.dirname(__file__), ".test-config")
@@ -39,6 +40,9 @@ def test_outside_range_response_is_read_and_next_point_can_succeed(capsys):
     ({"detail": "already answered"}, "already answered"),
     ({"error": "invalid_location"}, "invalid or missing location"),
     ({"message": "token expired"}, "login or permission required"),
+    ({"error_code": "rollcall_device_already_in_use"}, "device verification rejected"),
+    ({"error_code": "rollcall_position_invalid"}, "invalid or missing location"),
+    ({"error_code": "radar_signal_invalid_no_signal"}, "Bluetooth beacon validation failed"),
 ])
 def test_known_non_location_rejection_stops_point_round(data, reason):
     session = Mock(headers={})
@@ -96,3 +100,35 @@ def test_non_location_errors_do_not_trigger_legacy_solver_probes(status, data):
     session.put.return_value = response(data, status=status)
     assert not verify.send_radar(session, 42)
     assert session.put.call_count == 1
+
+
+@pytest.mark.parametrize('payload', [
+    {'error_code': 'radar_out_of_rollcall_scope'},
+    {'data': {'result': {'errorCode': 'radar_out_of_rollcall_scope'}}},
+    {'result': {'scope': {'status': 'radar_out_of_scope'}}},
+    {'error': {'description': 'radar_out_of_rollcall_scope'}},
+])
+def test_known_tronclass_scope_errors_are_recognized_through_real_container_names(payload):
+    session = Mock(headers={})
+    session.put.return_value = response(payload)
+    result = {}
+    with patch.object(verify.time, 'sleep'):
+        assert not verify.send_radar(session, 42, radar_points=POINTS, result=result)
+    assert session.put.call_count == len(POINTS)
+    assert result['detail'] == 'HTTP 400: outside signing range'
+
+
+def test_unknown_rejection_saves_safe_structure_without_response_private_values(tmp_path, capsys):
+    session = Mock(headers={})
+    session.put.return_value = response({'result': {'error_code': 'radar_new_rejection', 'code': 40021,
+        'message': 'PRIVATE_NAME PRIVATE_COOKIE', 'email': 'PRIVATE_EMAIL', 'token': 'radar_private_token'},
+        'PRIVATE_USER_KEY@example.invalid': 'PRIVATE_OTHER_VALUE'})
+    with patch('xmu_rollcall.config.CONFIG_DIR', tmp_path):
+        assert not verify.send_radar(session, 42, location=(24.45, 118.12))
+    saved = (tmp_path / 'radar_last_rejection.json').read_text(encoding='utf-8')
+    assert 'PRIVATE_' not in saved + capsys.readouterr().out
+    assert 'radar_private_token' not in saved
+    report = json.loads(saved)
+    assert report['error_codes'] == ['radar_new_rejection']
+    assert report['error_structure']['result']['message'] == '<str>'
+    assert report['error_structure']['result']['code'] == 40021

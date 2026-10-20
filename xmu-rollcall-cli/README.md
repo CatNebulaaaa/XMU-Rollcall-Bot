@@ -4,6 +4,8 @@
 
 The `LAST ROLLCALL` dashboard panel retains the latest course, start time, result, and number code until the next rollcall. Codes keep leading zeros and survive status changes and empty API lists; restarting the program clears the panel.
 
+Radar location inputs remain WGS84. Requests convert them once to GCJ-02 using the official mobile client's algorithm and use `api_version=1.76`. See the repository's `RADAR_COMPATIBILITY.md` for source provenance and verification limits.
+
 A command-line tool for monitoring and auto-answering Tronclass rollcalls at Xiamen University.
 
 > This project is intended for personal learning and automation convenience. Use it at your own risk and comply with your school's rules.

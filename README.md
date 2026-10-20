@@ -9,6 +9,7 @@
 - 启动标题为 `XMU Rollcall Bot CLI`，底部显示 `Fork by CatNebulaaaa` 并保留 `KrsMt` 原作者署名。
 - 数字签到后，TUI 的 `LAST ROLLCALL` 区域持续显示课程、签到时间、结果和签到码；下一次签到出现时更新，列表清空或同一次签到状态变化不会清除签到码。重新启动程序后从空白状态开始。
 - 雷达失败时显示 HTTP 状态和可识别的拒绝类别，并保留在 TUI 的 `Result` 行。遇到已结束、设备验证或参数错误等非位置问题时停止本轮点位轮询。未知响应只显示“unrecognized server rejection”，不会输出含个人信息的原始响应。
+- 修正雷达请求的坐标系和 API 版本：输入继续使用 WGS84，在提交时按官方移动 App 的算法转换为 GCJ-02，并使用 `api_version=1.76`。补全 `radar_out_of_rollcall_scope` 等官方错误码及嵌套响应识别。核查依据见 [RADAR_COMPATIBILITY.md](RADAR_COMPATIBILITY.md)。
 - 处理缺距离、非法 JSON、超时、登录拒绝和点位文件错误，避免原来的 `NoneType` 计算崩溃。
 
 ## 安装与启动
@@ -26,6 +27,8 @@ xmu start
 默认点位为学武楼、坤銮楼、文宣楼、西部片区2号楼（学信楼）、西部片区4号楼（启信楼）。坐标位于包内的 `radar_points.json`，取自具名楼宇轮廓的中心，采用 WGS84。
 
 楼宇中心不等于教室或教师的实际位置，因此预设点位不能保证处于签到半径内。HTTP 400 也不一定表示距离过远；应先查看拒绝类别，确认需要调整位置还是处理其他请求问题。目前没有真实雷达提交成功的验证记录。
+
+请继续在点位文件及 `--latitude/--longitude` 中填写 WGS84；程序会在发送请求时转换一次，不要提前把点位转换为 GCJ-02。未知拒绝会自动在 XMU 配置目录保存 `radar_last_rejection.json`，只包含响应结构、HTTP 状态和受限的机器错误码，不保存原始响应、个人字段值、Cookie 或 Token。
 
 自定义点位或单个实际位置：
 

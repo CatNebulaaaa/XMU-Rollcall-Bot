@@ -113,7 +113,9 @@ def test_radar_actual_location_does_not_require_distance():
     assert verify.send_radar(session, 42, (24.45, 118.12))
     assert session.put.call_count == 1
     body = session.put.call_args.kwargs["json"]
-    assert body["latitude"] == 24.45 and body["longitude"] == 118.12
+    # Reference values replayed from the official app's coordinate module.
+    assert body["latitude"] == pytest.approx(24.447350089291902)
+    assert body["longitude"] == pytest.approx(118.1249515642098)
 
 
 def test_radar_actual_location_failure_is_not_followed_by_solver_probes():
@@ -204,7 +206,7 @@ def test_point_round_advances_without_distance_and_stops_on_success():
         assert verify.send_radar(session, 42, radar_points=POINTS)
     assert session.put.call_count == 2
     bodies = [call.kwargs["json"] for call in session.put.call_args_list]
-    assert [body["latitude"] for body in bodies] == [24.45, 24.46]
+    assert [body["latitude"] for body in bodies] == pytest.approx([24.447350089291902, 24.457337668495377])
     assert len({body["deviceId"] for body in bodies}) == 1
     sleep.assert_called_once_with(5)
 
