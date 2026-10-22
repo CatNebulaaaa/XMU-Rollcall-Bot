@@ -1,6 +1,8 @@
 # xmu-rollcall-cli
 
-**CatNebulaaaa Fork** — based on [KrsMt-0113/XMU-Rollcall-Bot](https://github.com/KrsMt-0113/XMU-Rollcall-Bot), with timetable number-code fallback and five Xiang'an campus radar presets enabled by plain `xmu start`. Original author credit and the MIT license are preserved.
+**CatNebulaaaa Fork** — based on [KrsMt-0113/XMU-Rollcall-Bot](https://github.com/KrsMt-0113/XMU-Rollcall-Bot), with timetable number-code fallback and five Xiang'an campus radar presets enabled by plain `xmu start`.
+
+**Radar rollcalls were successfully completed by the cloud service in a real classroom on 2026-10-22.** Number rollcalls also have confirmed successful submissions.
 
 The `LAST ROLLCALL` dashboard panel retains the latest course, start time, result, and number code until the next rollcall. Codes keep leading zeros and survive status changes and empty API lists; restarting the program clears the panel.
 
@@ -95,7 +97,7 @@ export XMU_ROLLCALL_CONFIG_DIR="$HOME/Documents/.xmu_rollcall"
 
 - QR code rollcalls are currently **not supported**.
 - This tool depends on Tronclass/XMU API behavior and may break if upstream endpoints change.
-- The 48 regression tests use simulated responses. Real classroom attendance has not been verified; building centers may differ from the classroom location.
+- All 101 mocked regression tests passed against the source, local installation, and cloud runtime. Radar attendance is live-verified, but building-center presets may not cover every classroom.
 
 ## Supported Python Versions
 

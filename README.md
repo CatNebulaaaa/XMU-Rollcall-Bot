@@ -2,15 +2,13 @@
 
 这是 [CatNebulaaaa](https://github.com/CatNebulaaaa) 维护的改造版本，基于 [KrsMt-0113/XMU-Rollcall-Bot](https://github.com/KrsMt-0113/XMU-Rollcall-Bot)，保留原作者署名和 MIT 许可证。
 
-## 本 fork 的修改
+## 功能
 
-- 数字签到：旧 `student_rollcalls` 接口缺码时，查询 `timetable_rollcalls`，传入课程 ID 和签到的 UTC 日期，并按签到 ID 精确匹配。
-- 雷达签到：普通 `xmu start` 默认启用五个翔安校区点位轮询，不依赖接口返回距离；点位间隔 5 秒，成功立即停止。
-- 启动标题为 `XMU Rollcall Bot CLI`，底部显示 `Fork by CatNebulaaaa` 并保留 `KrsMt` 原作者署名。
-- 数字签到后，TUI 的 `LAST ROLLCALL` 区域持续显示课程、签到时间、结果和签到码；下一次签到出现时更新，列表清空或同一次签到状态变化不会清除签到码。重新启动程序后从空白状态开始。
-- 雷达失败时，TUI 持续显示中文原因、HTTP 状态、可安全展示的机器错误码、处理建议、各点位结果和脱敏诊断文件的实际路径。长错误码和路径自动换行。遇到已结束、设备验证或参数错误等非位置问题时停止本轮点位轮询；未知错误明确提示不能判定为距离问题。
-- 修正雷达请求的坐标系和 API 版本：输入继续使用 WGS84，在提交时按官方移动 App 的算法转换为 GCJ-02，并使用 `api_version=1.76`。补全 `radar_out_of_rollcall_scope` 等官方错误码及嵌套响应识别。核查依据见 [RADAR_COMPATIBILITY.md](RADAR_COMPATIBILITY.md)。
-- 处理缺距离、非法 JSON、超时、登录拒绝和点位文件错误，避免原来的 `NoneType` 计算崩溃。
+- **数字签到**：适配新版取码接口，按课程和签到 ID 匹配，保留签到码前导零。
+- **雷达签到**：已在云服务器实测成功。`xmu start` 默认轮询五个翔安校区点位，不依赖接口返回距离；点位间隔 5 秒，成功立即停止。
+- **签到信息保留**：持续显示最近一次签到的课程、时间、结果和数字签到码，直到下一次签到时更新。
+- **失败诊断**：显示中文原因、HTTP 状态、错误码、处理建议和各点位结果，并保存脱敏诊断文件。
+- **异常处理**：兼容缺距离、非法 JSON、网络超时和登录失效等情况，避免原来的 `NoneType` 计算崩溃。
 
 ## 安装与启动
 
@@ -26,7 +24,7 @@ xmu start
 
 默认点位为学武楼、坤銮楼、文宣楼、西部片区2号楼（学信楼）、西部片区4号楼（启信楼）。坐标位于包内的 `radar_points.json`，取自具名楼宇轮廓的中心，采用 WGS84。
 
-楼宇中心不等于教室或教师的实际位置，因此预设点位不能保证处于签到半径内。HTTP 400 也不一定表示距离过远；应先查看拒绝类别，确认需要调整位置还是处理其他请求问题。目前没有真实雷达提交成功的验证记录。
+楼宇中心不等于教室或教师的实际位置，因此预设点位不能保证覆盖所有教室。HTTP 400 也不一定表示距离过远；应先查看具体错误码和处理建议。
 
 请继续在点位文件及 `--latitude/--longitude` 中填写 WGS84；程序会在发送请求时转换一次，不要提前把点位转换为 GCJ-02。失败时会自动在 XMU 配置目录保存 `radar_last_rejection.json`，包含中文解释、建议、响应结构、HTTP 状态和受限的机器错误码，不保存原始响应、个人字段值、Cookie 或 Token。写入失败会在界面上明确说明。
 
@@ -54,7 +52,9 @@ xmu start --latitude YOUR_LATITUDE --longitude YOUR_LONGITUDE
 
 ## 验证与数据来源
 
-已通过 48 项模拟接口回归测试，并检查安装后的默认启动和界面署名。验证没有提交真实签到；楼宇中心不代表具体教室位置，真实课堂效果仍需验证。
+**2026-10-22 已确认云服务器自动完成真实雷达签到**，服务端成功响应和后台日志均已核实。数字签到也有真实提交成功记录。
+
+源码、本机安装包和云端运行环境均已通过 101 项模拟回归测试。雷达请求的坐标系、API 版本和核查依据见 [RADAR_COMPATIBILITY.md](RADAR_COMPATIBILITY.md)。
 
 点位来源见 [RADAR_POINTS_SOURCES.json](RADAR_POINTS_SOURCES.json)。地图数据为 © OpenStreetMap contributors，遵循 [ODbL 1.0](https://www.openstreetmap.org/copyright)。楼名与[厦大教学楼资料](https://metc.xmu.edu.cn/fwzn/ggjxfw.htm)及[信息学院楼宇名称公示](https://informatics.xmu.edu.cn/info/1103/12447.htm)核对。
 
